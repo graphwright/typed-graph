@@ -72,14 +72,16 @@ def test_shared_node_emitted_once() -> None:
     wf = WorksFor(id="wf1", subject=alice, object_=acme)
     knows = Knows(id="k1", subject=alice, object_=bob)
     src = serialize.to_python([wf, knows])
-    assert src.count("Person(id='alice'") == 1
+    assert src.count('Person(id="alice"') == 1
 
 
 def test_punctuated_id_is_sanitized_and_roundtrips() -> None:
     holmes = Person(id="wiki:Sherlock_Holmes", name="Sherlock Holmes")
     wf = WorksFor(id="w2", subject=holmes, object_=acme)
     got = _by_id(_roundtrip([wf]))
-    assert got["wiki:Sherlock_Holmes"] == holmes  # source executed, so the name was valid
+    assert (
+        got["wiki:Sherlock_Holmes"] == holmes
+    )  # source executed, so the name was valid
 
 
 def test_output_is_self_contained_source() -> None:

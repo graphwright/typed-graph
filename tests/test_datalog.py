@@ -91,7 +91,9 @@ def test_trait_compiled_inverse_matches_hand_written() -> None:
 
 def test_symmetric_trait_derives_reverse() -> None:
     eng = datalog.Engine()
-    eng.add_facts([Knows(id="k1", subject=alice, object_=bob, truth_status="asserted_true")])
+    eng.add_facts(
+        [Knows(id="k1", subject=alice, object_=bob, truth_status="asserted_true")]
+    )
     eng.add_traits(Knows)
     derived = eng.infer()
     assert any(s.subject is bob and s.object_ is alice for s in derived)
@@ -225,7 +227,9 @@ def test_add_rule_raises_on_higher_order_literal() -> None:
 
 
 def test_add_facts_raises_on_higher_order_fact() -> None:
-    outer = Believes(id="b1", subject=alice, object_=_wf(), truth_status="asserted_true")
+    outer = Believes(
+        id="b1", subject=alice, object_=_wf(), truth_status="asserted_true"
+    )
     eng = datalog.Engine()
     with pytest.raises(rules.UnsupportedRuleError):
         eng.add_facts([outer])
@@ -239,7 +243,9 @@ def test_add_facts_raises_on_higher_order_fact_even_if_not_asserted() -> None:
 
 
 def test_add_facts_is_atomic_on_invalid_batch() -> None:
-    outer = Believes(id="b1", subject=alice, object_=_wf(), truth_status="asserted_true")
+    outer = Believes(
+        id="b1", subject=alice, object_=_wf(), truth_status="asserted_true"
+    )
     eng = datalog.Engine()
     with pytest.raises(rules.UnsupportedRuleError):
         eng.add_facts([_wf(), outer])

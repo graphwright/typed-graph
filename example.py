@@ -5,7 +5,15 @@ Predicate types: WorksFor, Employs (its inverse), Owns (a `|`-union domain),
 and Knows (symmetric).
 """
 
-from base import AnyStatement, BaseStatement, EntityInstance, Inverse, Symmetric
+from base import (
+    AnyStatement,
+    BaseStatement,
+    EntityInstance,
+    Provenance,
+    Inverse,
+    Symmetric,
+)
+from serialize import to_python
 
 
 class Person(EntityInstance):
@@ -56,3 +64,26 @@ alice = Person(id="alice", name="Alice")
 bob = Person(id="bob", name="Bob")
 acme = Organization(id="acme", name="Acme Corp", industry="widgets")
 car = Vehicle(id="car1", make="Toyota")
+
+
+def main():
+    prov = Provenance(source="hr.csv", extraction_method="manual")
+    rel = WorksFor(
+        id="alice-works_for-acme",
+        subject=alice,
+        object_=acme,
+        truth_status="asserted_true",
+        provenance=(prov,),
+    )
+    outer = Believes(id="belief", subject=alice, object_=rel)
+    assert isinstance(outer, BaseStatement)
+    assert isinstance(outer.object_, BaseStatement)
+    print(to_python([outer]))
+
+
+if __name__ == "__main__":
+    # Import from the module so all types carry __module__ == "example"
+    # (serialize.to_python requires importable types, not __main__).
+    from example import main as _main
+
+    _main()

@@ -23,7 +23,6 @@ from typing import Union
 
 from base import AnyStmt, BaseStatement, Instance
 
-
 # --------------------------------------------------------------------------- #
 # Exceptions (the gotchas, made loud)
 # --------------------------------------------------------------------------- #

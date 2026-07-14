@@ -116,19 +116,25 @@ class Engine:
                 seen.add(prov)
         return tuple(merged)
 
-    def _merge_duplicate(self, key: str, existing: AnyStmt, incoming: AnyStmt) -> AnyStmt:
+    def _merge_duplicate(
+        self, key: str, existing: AnyStmt, incoming: AnyStmt
+    ) -> AnyStmt:
         if existing.truth_status != incoming.truth_status:
             raise ValueError(
                 "conflicting duplicate fact for content-addressed key "
                 f"{key!r}: truth_status {existing.truth_status!r} != "
                 f"{incoming.truth_status!r}"
             )
-        merged_provenance = self._merge_provenance(existing.provenance, incoming.provenance)
+        merged_provenance = self._merge_provenance(
+            existing.provenance, incoming.provenance
+        )
         if merged_provenance == existing.provenance:
             return existing
         return existing.model_copy(update={"provenance": merged_provenance})
 
-    def _merge_provenance_record(self, stmt: AnyStmt, provenance: Provenance) -> AnyStmt:
+    def _merge_provenance_record(
+        self, stmt: AnyStmt, provenance: Provenance
+    ) -> AnyStmt:
         if stmt.provenance is None:
             return stmt.model_copy(update={"provenance": (provenance,)})
         if provenance in stmt.provenance:
