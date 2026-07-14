@@ -67,16 +67,12 @@ def _canonicalize_id(entity_id: str) -> str:
 
 
 def _is_instance(obj: object) -> TypeGuard[InstanceLike]:
-    return (
-        isinstance(getattr(obj, "id", None), str)
-        and not callable(obj)
-    )
+    id_value = getattr(obj, "id", None)
+    return isinstance(id_value, str) and not callable(obj)
 
 
 def _is_statement(obj: object) -> TypeGuard[StatementLike]:
     if not _is_instance(obj):
-        return False
-    if not hasattr(obj, "subject") or not hasattr(obj, "object_") or not hasattr(obj, "truth_status"):
         return False
     subject = getattr(obj, "subject", None)
     object_ = getattr(obj, "object_", None)
@@ -100,6 +96,8 @@ def _normalize_pred_types(pred_types: PredicateClassSet) -> tuple[PredicateClass
     if pred_types is None:
         return None
     pred_type_tuple = tuple(pred_types)
+    if not all(isinstance(t, type) for t in pred_type_tuple):
+        raise TypeError("predicate filters must be class types")
     return pred_type_tuple if pred_type_tuple else None
 
 
@@ -158,7 +156,7 @@ class Graph:
     ) -> list[StatementLike]:
         """Outward edges from entity_id, optionally filtered by type and truth_status."""
         edges = self.out_edges.get(_canonicalize_id(entity_id), [])
-        if pred_type is not None:
+        if pred_type:
             edges = [e for e in edges if isinstance(e, pred_type)]
         truth_set = _normalize_truth_filter(truth)
         if truth_set is not None:
@@ -173,7 +171,7 @@ class Graph:
     ) -> list[StatementLike]:
         """Inward edges to entity_id, optionally filtered by type and truth_status."""
         edges = self.in_edges.get(_canonicalize_id(entity_id), [])
-        if pred_type is not None:
+        if pred_type:
             edges = [e for e in edges if isinstance(e, pred_type)]
         truth_set = _normalize_truth_filter(truth)
         if truth_set is not None:
