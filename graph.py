@@ -33,16 +33,21 @@ _WIKI_PREFIX = "https://bakerstreet.fandom.com/wiki/"
 
 
 class EntityLike(Protocol):
+    """Duck-typed graph instance with a stable identifier (`Instance.id` in V)."""
+
     id: str
 
 
 class StatementLike(EntityLike, Protocol):
+    """Duck-typed predicate instance with subject/object endpoints."""
+
     subject: EntityLike
     object_: EntityLike
     truth_status: str
+    provenance: tuple[object, ...] | None
 
 
-PredicateClass: TypeAlias = type[object]
+PredicateClass: TypeAlias = type[StatementLike]
 PredicateFilter: TypeAlias = PredicateClass | tuple[PredicateClass, ...] | None
 PredicateClassSet: TypeAlias = Collection[PredicateClass] | None
 TruthFilter: TypeAlias = str | Collection[str] | None
