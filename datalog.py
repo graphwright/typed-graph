@@ -66,16 +66,18 @@ class Engine:
 
     @staticmethod
     def _key(predicate: type[AnyStmt], subj_id: str, obj_id: str) -> str:
-        return f"{predicate.__name__}({subj_id},{obj_id})"
+        return f"{predicate.__module__}.{predicate.__qualname__}({subj_id},{obj_id})"
 
     # ---------------------------------------------------------------------- #
     # Population
     # ---------------------------------------------------------------------- #
 
-    def add_facts(self, facts: Iterable[AnyStmt]) -> None:
+    def add_facts(self, facts: Iterable[AnyStmt]) -> int:
         """Seed the engine with ground facts; only truth_status == asserted_true
         is reasoned over. Raises UnsupportedRuleError for a higher-order fact (an
-        asserted statement whose object is itself a statement)."""
+        asserted statement whose object is itself a statement). Return the
+        number of statements ignored because their status is not asserted_true."""
+        skipped = 0
         seen: dict[str, AnyStmt] = {}
         for stmt in facts:
             if isinstance(stmt.object_, BaseStatement):
@@ -84,6 +86,7 @@ class Engine:
                     "statement; higher-order reasoning is not supported"
                 )
             if stmt.truth_status != "asserted_true":
+                skipped += 1
                 continue
             key = self._key(type(stmt), stmt.subject.id, stmt.object_.id)
             existing = seen.get(key)
@@ -95,6 +98,7 @@ class Engine:
                 seen[key] = self._merge_duplicate(key, existing, stmt)
         for stmt in seen.values():
             self._register_fact(stmt)
+        return skipped
 
     @staticmethod
     def _merge_provenance(
