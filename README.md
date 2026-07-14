@@ -12,6 +12,144 @@ object types, so a predicate's domain and range are ordinary type annotations ch
 by mypy and Pydantic. A worked domain (`Person`, `Organization`, `WorksFor`) lives in
 `example.py`.
 
+## Mini-tutorial
+
+This walkthrough uses the domain defined in `example.py` — a small world of people,
+organizations, and vehicles — to show how the pieces fit together.
+
+### 1. Define your entity types
+
+Entity types subclass `EntityInstance`. They are ordinary Pydantic models, so every
+field gets type-checked at construction and the model is frozen (no mutation after
+creation):
+
+```python
+from base import EntityInstance
+
+class Person(EntityInstance):
+    """An individual person."""
+    name: str
+
+class Organization(EntityInstance):
+    """A company or other organization."""
+    name: str
+    industry: str
+
+class Vehicle(EntityInstance):
+    """A vehicle that a Person or Organization may own."""
+    make: str
+```
+
+Every instance carries a stable `id` field (inherited from `Instance`). You supply it
+at construction; it is never parsed back to infer type — the class hierarchy owns that.
+
+### 2. Define your predicate types
+
+Predicate types subclass `BaseStatement[SubjectT, ObjectT]`. The type parameters
+*are* the domain and range: mypy enforces them statically, Pydantic at runtime —
+no hand-written validators needed.
+
+```python
+from base import BaseStatement, Inverse, Symmetric
+
+# Single-type domain and range.
+class WorksFor(BaseStatement[Person, Organization]):
+    """dom = {Person}, ran = {Organization}."""
+
+# Inverse trait: WorksFor(p, o) entails Employs(o, p).
+class Employs(BaseStatement[Organization, Person], Inverse[WorksFor]):
+    """dom = {Organization}, ran = {Person}."""
+
+# Multi-member domain written as a | union.
+class Owns(BaseStatement[Person | Organization, Vehicle]):
+    """dom = {Person, Organization}, ran = {Vehicle}."""
+
+# Symmetric trait: Knows(x, y) entails Knows(y, x).
+class Knows(BaseStatement[Person, Person], Symmetric):
+    """dom = ran = {Person}."""
+```
+
+### 3. Create entity instances
+
+Instances are frozen Pydantic models — safe to share and use as dict keys:
+
+```python
+alice = Person(id="alice", name="Alice")
+bob   = Person(id="bob",   name="Bob")
+acme  = Organization(id="acme", name="Acme Corp", industry="widgets")
+car   = Vehicle(id="car1", make="Toyota")
+```
+
+### 4. Create statements
+
+A statement is also an `Instance` (it lives in $V$ alongside entities). Constructing
+one validates the subject and object types immediately. Every statement carries a
+`truth_status` field; the default is `"hypothetical"`:
+
+```python
+from base import Provenance
+
+prov = Provenance(source="hr.csv", extraction_method="manual")
+
+rel = WorksFor(
+    id="alice-works_for-acme",
+    subject=alice,
+    object_=acme,
+    truth_status="asserted_true",
+    provenance=(prov,),   # one or more Provenance records, or None
+)
+```
+
+A statement is *grounded* when `provenance` is a non-empty tuple (it has a traceable
+source) and *ungrounded* when it is `None` (a hypothesis or derived fact without a
+cited source). The two states are all-or-nothing — there is no partial provenance.
+
+Trying to pass the wrong type for subject or object raises a Pydantic `ValidationError`
+at construction time:
+
+```python
+WorksFor(id="bad", subject=acme, object_=alice, ...)  # ValidationError: acme is not a Person
+```
+
+### 5. Higher-order predication
+
+Because a statement is a full member of $V$, one predicate can range over another.
+`Believes` stores an entire statement as its object, preserving the concrete type:
+
+```python
+from base import AnyStatement
+
+class Believes(BaseStatement[Person, AnyStatement]):
+    """dom = {Person}, ran = any statement."""
+
+belief = Believes(id="belief", subject=alice, object_=rel)
+# belief.object_ is still a WorksFor, not a plain BaseStatement
+assert isinstance(belief.object_, WorksFor)
+```
+
+`AnyStatement` is an `InstanceOf[BaseStatement]` validator exported from `base`. It
+accepts any `BaseStatement` subclass and stores it without rebuilding it as the base
+type, so the concrete predicate's traits, inverse declarations, and fields survive.
+
+### 6. Serialize to runnable Python
+
+`serialize.to_python` turns a list of instances into self-contained, topologically
+ordered Python source. Instances referenced by others appear first; shared objects
+are assigned to a variable once and reused by name — no duplication, no loss of
+identity:
+
+```python
+from serialize import to_python
+
+print(to_python([belief]))
+```
+
+The output is executable Python that reconstructs the exact graph when run. This makes
+it straightforward to save a graph to a `.py` file and reload it with a plain
+`exec`/`import`.
+
+---
+
 ## Domain and range
 
 $\text{dom}(p)$ and $\text{ran}(p)$ are **sets** of types. A predicate binds them as
