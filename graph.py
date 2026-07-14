@@ -47,7 +47,9 @@ class StatementLike(EntityLike, Protocol):
     provenance: tuple[object, ...] | None
 
 
-PredicateClass: TypeAlias = type[StatementLike]
+# `isinstance` filtering accepts concrete statement classes from external modules;
+# `type[object]` keeps this API permissive while StatementLike guards edge payloads.
+PredicateClass: TypeAlias = type[object]
 PredicateFilter: TypeAlias = PredicateClass | tuple[PredicateClass, ...] | None
 PredicateClassSet: TypeAlias = Collection[PredicateClass] | None
 TruthFilter: TypeAlias = str | Collection[str] | None
