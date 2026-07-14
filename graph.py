@@ -32,17 +32,21 @@ indexed correctly.
 _WIKI_PREFIX = "https://bakerstreet.fandom.com/wiki/"
 
 
-class EntityLike(Protocol):
-    """Duck-typed graph instance with a stable identifier (`Instance.id` in V)."""
+class InstanceLike(Protocol):
+    """Duck-typed graph instance in V with a stable `id`."""
 
     id: str
 
 
-class StatementLike(EntityLike, Protocol):
+class EntityLike(InstanceLike, Protocol):
+    """Duck-typed entity endpoint."""
+
+
+class StatementLike(InstanceLike, Protocol):
     """Duck-typed predicate instance with subject/object endpoints."""
 
     subject: EntityLike
-    object_: EntityLike
+    object_: InstanceLike
     truth_status: str
     provenance: tuple[object, ...] | None
 
@@ -62,7 +66,7 @@ def _canonicalize_id(entity_id: str) -> str:
     return entity_id
 
 
-def _is_entity(obj: object) -> TypeGuard[EntityLike]:
+def _is_instance(obj: object) -> TypeGuard[InstanceLike]:
     return (
         hasattr(obj, "id")
         and isinstance(getattr(obj, "id", None), str)
@@ -71,14 +75,14 @@ def _is_entity(obj: object) -> TypeGuard[EntityLike]:
 
 
 def _is_statement(obj: object) -> TypeGuard[StatementLike]:
-    if not _is_entity(obj):
+    if not _is_instance(obj):
         return False
     if not hasattr(obj, "subject") or not hasattr(obj, "object_") or not hasattr(obj, "truth_status"):
         return False
     subject = getattr(obj, "subject", None)
     object_ = getattr(obj, "object_", None)
     truth_status = getattr(obj, "truth_status", None)
-    return _is_entity(subject) and _is_entity(object_) and isinstance(truth_status, str)
+    return _is_instance(subject) and _is_instance(object_) and isinstance(truth_status, str)
 
 
 def _normalize_truth_filter(truth: TruthFilter) -> set[str] | None:
@@ -112,12 +116,12 @@ subject or object of higher-order predicates.
 class Graph:
 
     def __init__(self, instances: Iterable[object]):
-        self.by_id: dict[str, EntityLike] = {}
+        self.by_id: dict[str, InstanceLike] = {}
         self.out_edges: dict[str, list[StatementLike]] = defaultdict(list)   # subject.id -> [stmt]
         self.in_edges: dict[str, list[StatementLike]] = defaultdict(list)    # object_.id -> [stmt]
 
         for inst in instances:
-            if not _is_entity(inst):
+            if not _is_instance(inst):
                 continue
             if inst.id in self.by_id:
                 warnings.warn(
@@ -135,10 +139,10 @@ class Graph:
         """Build a Graph from all EntityInstance values in a module's namespace."""
         return cls(
             v for v in vars(module).values()
-            if _is_entity(v) and not isinstance(v, type)
+            if _is_instance(v) and not isinstance(v, type)
         )
 
-    def get(self, entity_id: str) -> EntityLike | None:
+    def get(self, entity_id: str) -> InstanceLike | None:
         """Return the instance for entity_id, normalizing wiki URLs to canonical form."""
         return self.by_id.get(_canonicalize_id(entity_id))
 
