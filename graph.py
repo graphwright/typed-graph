@@ -68,8 +68,7 @@ def _canonicalize_id(entity_id: str) -> str:
 
 def _is_instance(obj: object) -> TypeGuard[InstanceLike]:
     return (
-        hasattr(obj, "id")
-        and isinstance(getattr(obj, "id", None), str)
+        isinstance(getattr(obj, "id", None), str)
         and not callable(obj)
     )
 
@@ -90,13 +89,18 @@ def _normalize_truth_filter(truth: TruthFilter) -> set[str] | None:
         return None
     if isinstance(truth, str):
         return {truth}
-    return set(truth)
+    truth_set = set(truth)
+    if not all(isinstance(v, str) for v in truth_set):
+        raise TypeError("truth filter values must be strings")
+    return truth_set
 
 
 def _normalize_pred_types(pred_types: PredicateClassSet) -> tuple[PredicateClass, ...] | None:
-    if not pred_types:
+    """Normalize predicate-type filters; None or empty means no filtering."""
+    if pred_types is None:
         return None
-    return tuple(pred_types)
+    pred_type_tuple = tuple(pred_types)
+    return pred_type_tuple if pred_type_tuple else None
 
 
 """
