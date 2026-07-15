@@ -28,15 +28,16 @@ from typing import Any
 try:
     import black as _black
 
-    _BLACK_MODE = _black.Mode(target_versions={_black.TargetVersion.PY312})
+    _BLACK_MODE = _black.Mode()
 
     def _fmt(src: str) -> str:
         return _black.format_str(src, mode=_BLACK_MODE)
 
 except ImportError:
 
-    def _fmt(src: str) -> str:  # type: ignore[misc]
+    def _fmt(src: str) -> str:
         return src
+
 
 from pydantic import BaseModel
 
@@ -154,8 +155,7 @@ def to_python(instances: Iterable[Instance]) -> str:
             module = importlib.import_module(t.__module__)
         except ImportError as exc:
             raise ValueError(
-                f"{t.__name__} must live in an importable module, got "
-                f"{t.__module__!r}"
+                f"{t.__name__} must live in an importable module, got {t.__module__!r}"
             ) from exc
         if getattr(module, t.__name__, None) is not t:
             raise ValueError(

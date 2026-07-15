@@ -9,6 +9,8 @@ by subclassing these; see example.py for a worked domain.
 import sys
 from typing import (
     Any,
+    cast,
+    Dict,
     ForwardRef,
     Generic,
     Literal,
@@ -94,16 +96,16 @@ class BaseStatement(Instance, Generic[SubjectT, ObjectT]):
 
     @model_validator(mode="before")
     @classmethod
-    def _ensure_provenance_tuple(cls, data: Any) -> Any:
+    def _ensure_provenance_tuple(cls, data: Dict[str, Any]) -> Any:
         """Normalize single or list provenance inputs to a tuple."""
-        if not isinstance(data, dict):
-            return data
+        # if not isinstance(data, dict):
+        #     return data
         provenance = data.get("provenance")
         if provenance is None or isinstance(provenance, tuple):
             return data
         normalized = dict(data)
         if isinstance(provenance, list):
-            normalized["provenance"] = tuple(provenance)
+            normalized["provenance"] = tuple(cast(list[Provenance], provenance))
         else:
             normalized["provenance"] = (provenance,)
         return normalized
@@ -135,7 +137,7 @@ class BaseStatement(Instance, Generic[SubjectT, ObjectT]):
 # instead rebuild the object as the base class, discarding its type. Trade-off:
 # an object supplied as a raw dict is rejected -- reconstruct statements via the
 # loader and pass instances, which is what the serialization design does anyway.
-AnyStatement = InstanceOf[BaseStatement]
+AnyStatement = InstanceOf[BaseStatement[Any, Any]]
 
 # Shorthand for "a statement of any subject/object type", for annotations that
 # would otherwise repeat BaseStatement[Any, Any] (and its type: ignore[type-arg]).
@@ -213,7 +215,7 @@ def get_inverse(
                         f"not resolvable in module {stmt_type.__module__!r}"
                     )
                 partner = resolved
-            return partner
+            return cast(type[BaseStatement[Any, Any]], partner)
     return None
 
 
@@ -238,7 +240,7 @@ def _domain_range(cls: type) -> tuple[Any, Any] | None:
     return None
 
 
-def _validate_inverse_declaration(cls: type) -> None:
+def _validate_inverse_declaration(cls: type) -> None:  # pyright: ignore[reportUnusedFunction]
     """If `cls` declares `Inverse[P]`, require its domain/range to be P's swapped.
 
     Runs from `BaseStatement.__init_subclass__`, so a mismatch is caught at import.

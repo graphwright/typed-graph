@@ -131,7 +131,30 @@ assert isinstance(belief.object_, WorksFor)
 accepts any `BaseStatement` subclass and stores it without rebuilding it as the base
 type, so the concrete predicate's traits, inverse declarations, and fields survive.
 
-### 6. Serialize to runnable Python
+### 6. Build a Graph incrementally
+
+`Graph` is an in-memory container and index over instances. You can build it
+incrementally by adding entities and statements as they are created:
+
+```python
+from graph import Graph
+
+g = Graph()
+g.add(alice)
+g.add(acme)
+g.extend([bob, car])
+
+g.add(rel)     # WorksFor statement
+g.add(belief)  # Higher-order Believes statement
+
+assert g.get("alice") is alice
+assert g.edges_from("alice", pred_type=WorksFor) == [rel]
+```
+
+`Graph` also still supports bulk construction (`Graph([alice, acme, rel])`) when
+you already have a full collection.
+
+### 7. Serialize to runnable Python
 
 `serialize.to_python` turns a list of instances into self-contained, topologically
 ordered Python source. Instances referenced by others appear first; shared objects

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 import serialize
@@ -88,7 +90,7 @@ def test_output_is_self_contained_source() -> None:
     # The emitted program carries its own imports and executes on empty globals.
     src = serialize.to_python([WorksFor(id="wf1", subject=alice, object_=acme)])
     assert src.startswith(f"{serialize._GENERATED_HEADER}\n")
-    ns: dict = {}
+    ns: dict[str, Any] = {}
     exec(src, ns)  # must not raise
 
 

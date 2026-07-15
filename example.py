@@ -3,16 +3,24 @@
 Entity types: Person, Organization, Vehicle.
 Predicate types: WorksFor, Employs (its inverse), Owns (a `|`-union domain),
 and Knows (symmetric).
+
+The runnable `main()` demonstrates the mutable graph API:
+
+    g = Graph()
+    g.add(alice)
+    g.add(acme)
+    g.add(works_for)
 """
 
 from base import (
     AnyStatement,
     BaseStatement,
     EntityInstance,
-    Provenance,
     Inverse,
+    Provenance,
     Symmetric,
 )
+from graph import Graph
 from serialize import to_python
 
 
@@ -66,18 +74,31 @@ acme = Organization(id="acme", name="Acme Corp", industry="widgets")
 car = Vehicle(id="car1", make="Toyota")
 
 
-def main():
+def main() -> None:
+    g = Graph()
+    g.add(alice)
+    g.add(acme)
+    g.extend([bob, car])
+
     prov = Provenance(source="hr.csv", extraction_method="manual")
-    rel = WorksFor(
+    works_for = WorksFor(
         id="alice-works_for-acme",
         subject=alice,
         object_=acme,
         truth_status="asserted_true",
         provenance=(prov,),
     )
-    outer = Believes(id="belief", subject=alice, object_=rel)
+    g.add(works_for)
+
+    outer = Believes(id="belief", subject=alice, object_=works_for)
+    g.add(outer)
+
     assert isinstance(outer, BaseStatement)
     assert isinstance(outer.object_, BaseStatement)
+    assert g.get("alice") is alice
+    assert g.edges_from("alice", pred_type=WorksFor) == [works_for]
+
+    print(g.describe("alice"))
     print(to_python([outer]))
 
 

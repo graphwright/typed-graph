@@ -236,8 +236,8 @@ class Engine:
                     # want the concrete entity subtype; Pydantic checks at runtime.
                     stmt = pred(
                         id=key,
-                        subject=subj,  # type: ignore[arg-type]
-                        object_=obj,  # type: ignore[arg-type]
+                        subject=subj,
+                        object_=obj,
                         truth_status="asserted_true",
                         provenance=(inferred_provenance,),
                     )

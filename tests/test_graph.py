@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import pytest
 
+from base import TruthStatus
 from graph import Graph
-from base import Provenance
 from example import (
     Knows,
     Organization,
-    Owns,
     Person,
-    Vehicle,
     WorksFor,
     acme,
     alice,
@@ -19,13 +17,18 @@ from example import (
 )
 
 
-def _wf(truth_status: str = "asserted_true") -> WorksFor:
+def _wf(truth_status: TruthStatus = "asserted_true") -> WorksFor:
     return WorksFor(id="wf1", subject=alice, object_=acme, truth_status=truth_status)
 
 
 # ---------------------------------------------------------------------------
 # Construction
 # ---------------------------------------------------------------------------
+
+
+def test_empty_constructor_creates_empty_graph() -> None:
+    g = Graph()
+    assert g.by_id == {}
 
 
 def test_entity_indexed_by_id() -> None:
@@ -41,17 +44,38 @@ def test_statement_indexed_in_by_id_and_edges() -> None:
     assert wf in g.in_edges["acme"]
 
 
+def test_add_accepts_entities_and_statements() -> None:
+    wf = _wf()
+    g = Graph()
+    g.add(alice)
+    g.add(acme)
+    g.add(wf)
+    assert g.get("alice") is alice
+    assert g.get("acme") is acme
+    assert g.get("wf1") is wf
+    assert g.edges_from("alice") == [wf]
+
+
+def test_extend_matches_bulk_constructor_behavior() -> None:
+    wf = _wf()
+    g = Graph()
+    g.extend([alice, acme, wf])
+    assert g.get("alice") is alice
+    assert g.get("wf1") is wf
+    assert g.edges_to("acme") == [wf]
+
+
 def test_non_instance_objects_skipped() -> None:
     """Callables and non-id objects must not crash or pollute the index."""
     g = Graph([alice, lambda x: x, 42, "string"])
     assert list(g.by_id.keys()) == ["alice"]
 
 
-def test_id_collision_warns(recwarn: pytest.WarningsChecker) -> None:
+def test_id_collision_warns() -> None:
     alice2 = Person(id="alice", name="Alice-dupe")
-    g = Graph([alice, alice2])
-    assert len(recwarn) == 1
-    assert "collision" in str(recwarn[0].message).lower()
+    with pytest.warns(UserWarning, match="collision") as record:
+        g = Graph([alice, alice2])
+    assert len(record) == 1
     assert g.get("alice") is alice2  # last write wins
 
 
@@ -62,6 +86,7 @@ def test_id_collision_warns(recwarn: pytest.WarningsChecker) -> None:
 
 def test_from_module_collects_instances() -> None:
     import example
+
     g = Graph.from_module(example)
     assert g.get("alice") is alice
     assert g.get("acme") is acme
@@ -88,7 +113,9 @@ def test_edges_from_pred_type_filter() -> None:
 
 def test_edges_from_truth_filter_excludes_non_asserted() -> None:
     wf_true = _wf("asserted_true")
-    wf_hyp = WorksFor(id="wf2", subject=alice, object_=acme, truth_status="hypothetical")
+    wf_hyp = WorksFor(
+        id="wf2", subject=alice, object_=acme, truth_status="hypothetical"
+    )
     g = Graph([alice, acme, wf_true, wf_hyp])
     result = g.edges_from("alice", truth="asserted_true")
     assert wf_true in result
@@ -97,7 +124,9 @@ def test_edges_from_truth_filter_excludes_non_asserted() -> None:
 
 def test_edges_from_truth_set() -> None:
     wf_true = _wf("asserted_true")
-    wf_false = WorksFor(id="wf2", subject=alice, object_=acme, truth_status="asserted_false")
+    wf_false = WorksFor(
+        id="wf2", subject=alice, object_=acme, truth_status="asserted_false"
+    )
     g = Graph([alice, acme, wf_true, wf_false])
     result = g.edges_from("alice", truth={"asserted_true", "asserted_false"})
     assert wf_true in result
@@ -149,7 +178,9 @@ def test_bfs_does_not_revisit_nodes() -> None:
 
 
 def test_bfs_respects_truth_filter() -> None:
-    wf_hyp = WorksFor(id="wf-hyp", subject=alice, object_=acme, truth_status="hypothetical")
+    wf_hyp = WorksFor(
+        id="wf-hyp", subject=alice, object_=acme, truth_status="hypothetical"
+    )
     g = Graph([alice, acme, wf_hyp])
     layers = g.bfs(["alice"], max_hops=2, truth_values=("asserted_true",))
     all_found = {eid for layer in layers for eid in layer}
@@ -207,7 +238,7 @@ def test_describe_known_id() -> None:
     assert len(result) > 0
 
 
-def test_print_edges_runs_without_error(capsys: pytest.CaptureFixture) -> None:
+def test_print_edges_runs_without_error(capsys: pytest.CaptureFixture[str]) -> None:
     wf = _wf()
     g = Graph([alice, acme, wf])
     g.print_edges(g.edges_from("alice"))
