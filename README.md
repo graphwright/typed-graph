@@ -171,6 +171,31 @@ The output is executable Python that reconstructs the exact graph when run. This
 it straightforward to save a graph to a `.py` file and reload it with a plain
 `exec`/`import`.
 
+## Sherlock Mystery Demo
+
+The Sherlock subproject includes a runnable demo that now solves the central
+"where is the photograph hidden?" mystery from *A Scandal in Bohemia*.
+
+Run from the repository root:
+
+```bash
+SOLVE_MYSTERY=1 pdm run python -m sherlock.demo
+```
+
+Expected output includes a final inference line like:
+
+```text
+Inferred: Irene Adler's photograph is at Irene Adler's sitting-room
+```
+
+Notes:
+
+- The demo first attempts a hand-written Horn clause through `datalog.Engine`.
+- If the current dataset shape does not satisfy that exact rule body, it falls
+    back to a dataset-compatible clue-chain inference.
+- Entity constants are resolved robustly by exact id first, then tokenized
+    canonical/alias matching.
+
 ---
 
 ## Domain and range

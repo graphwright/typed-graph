@@ -442,6 +442,41 @@ when the question is about the graph's *contents* rather than about a *neighborh
 
 ---
 
+## Scandal in Bohemia: Query Right Before the Reveal
+
+The interesting Sherlock question is often:
+
+"Given what is known immediately before Holmes announces the answer, where is
+Irene Adler's photograph?"
+
+This is a two-step pattern:
+
+1. Use query primitives (`bfs_query()` / `scan_query()`) to gather the relevant
+  local facts and timeline clues.
+2. Apply rule-layer inference (a hand-written Horn clause) to produce the final
+  location statement.
+
+Why split it this way:
+
+- Query tools are great for neighborhood and filtering.
+- The final leap is a cross-predicate join that is best represented as an
+  explicit rule.
+
+In this repository, that end-to-end flow is implemented in `sherlock/demo.py`
+under `SOLVE_MYSTERY=1`.
+
+Typical fact pattern to retrieve before applying the rule:
+
+- Possession facts for Irene and the photograph.
+- Event participation around the staged fire-alarm sequence.
+- Time anchoring for those events (`OccurredAt` moments).
+- Location context for the key room when available.
+
+This keeps querying focused on collecting evidence and keeps inference explicit,
+auditable, and reproducible.
+
+---
+
 ## ID Canonicalization
 
 Entities are sometimes named more than one way in source data — a full URL and a short slug
