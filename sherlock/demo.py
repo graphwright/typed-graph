@@ -203,8 +203,7 @@ def solve_mystery(graph: Graph) -> None:
     if len(photo_places) == 1:
         place_id = photo_places[0]
         print(
-            f"Deduced uniquely: {_name(graph, photo_id)} "
-            f"is in {_name(graph, place_id)}"
+            f"Deduced uniquely: {_name(graph, photo_id)} is in {_name(graph, place_id)}"
         )
         return
 
@@ -273,7 +272,7 @@ def solve_mystery_problog(graph: Graph) -> None:
         query_arity=1,
         primitive_lines=primitive_lines,
         evidence_lines=evidence_lines,
-        evaluator=lambda _source: query_result,
+        evaluator=lambda source: query_result,
     )
 
     ranked = sorted(marginals.items(), key=lambda item: item[1], reverse=True)

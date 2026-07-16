@@ -179,4 +179,6 @@ def test_load_story_graph_adds_carry_event_location_hint_if_available() -> None:
     hinted_edges = graph.edges_from(
         "sib:event:holmes_carried_into_sitting_room", pred_type=HappenedIn
     )
-    assert any(edge.object_.id == "place:irene_adlers_sitting-room" for edge in hinted_edges)
+    assert any(
+        edge.object_.id == "place:irene_adlers_sitting-room" for edge in hinted_edges
+    )

@@ -12,7 +12,7 @@ import json
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, cast
+from typing import Any, Literal, Protocol, TypeGuard
 
 from base import BaseStatement
 from graph import Graph
@@ -44,14 +44,16 @@ def _quote(term: str) -> str:
     return json.dumps(term)
 
 
+def _is_asserted_statement(inst: object) -> TypeGuard[BaseStatement[Any, Any]]:
+    return isinstance(inst, BaseStatement) and inst.truth_status == "asserted_true"
+
+
 def _iter_asserted_statements(graph: Graph) -> list[BaseStatement[Any, Any]]:
     stmts: list[BaseStatement[Any, Any]] = []
     for inst in graph.by_id.values():
-        if not isinstance(inst, BaseStatement):
+        if not _is_asserted_statement(inst):
             continue
-        if inst.truth_status != "asserted_true":
-            continue
-        stmts.append(cast(BaseStatement[Any, Any], inst))
+        stmts.append(inst)
     return sorted(stmts, key=lambda stmt: stmt.id)
 
 
@@ -60,9 +62,7 @@ def emit_asserted_facts(graph: Graph) -> list[str]:
     lines: list[str] = []
     for stmt in _iter_asserted_statements(graph):
         pred = _camel_to_snake(type(stmt).__name__)
-        lines.append(
-            f"{pred}({_quote(stmt.subject.id)}, {_quote(stmt.object_.id)})."
-        )
+        lines.append(f"{pred}({_quote(stmt.subject.id)}, {_quote(stmt.object_.id)}).")
     return lines
 
 

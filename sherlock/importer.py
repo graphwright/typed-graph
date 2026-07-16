@@ -285,9 +285,9 @@ def load_story_graph(
 
     existing_statement_ids = {stmt.id for stmt in statements}
     for event_id, location_id in _EVENT_LOCATION_HINTS.items():
-        event = registry.get(event_id)
-        location = registry.get(location_id)
-        if not isinstance(event, Event) or not isinstance(location, Location):
+        event_inst = registry.get(event_id)
+        location_inst = registry.get(location_id)
+        if not isinstance(event_inst, Event) or not isinstance(location_inst, Location):
             continue
 
         stmt_id = f"stmt:{event_id}:HappenedIn:{location_id}"
@@ -297,8 +297,8 @@ def load_story_graph(
         statements.append(
             HappenedIn(
                 id=stmt_id,
-                subject=event,
-                object_=location,
+                subject=event_inst,
+                object_=location_inst,
                 truth_status="asserted_true",
                 provenance=(
                     Provenance(

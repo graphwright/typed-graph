@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Mapping
+from typing import Any
 
 import pytest
 
@@ -105,12 +106,17 @@ def test_build_candidate_place_program_emits_rule_and_query() -> None:
         candidate_place_ids=[room_id],
         query_predicate="photo_in_place",
         primitive_lines=["0.900000::photo_is_real."],
-        evidence_lines=['evidence(happened_in("sib:event:holmes_carried_into_sitting_room", "place:irene_adlers_sitting-room"), true)'],
+        evidence_lines=[
+            'evidence(happened_in("sib:event:holmes_carried_into_sitting_room", "place:irene_adlers_sitting-room"), true)'
+        ],
     )
 
     assert "0.900000::photo_is_real." in program.source
     assert "physically_in(Object, Place)" in program.source
-    assert 'candidate_place_1 :- photo_in_place("obj:irene_adlers_photograph", "place:irene_adlers_sitting-room").' in program.source
+    assert (
+        'candidate_place_1 :- photo_in_place("obj:irene_adlers_photograph", "place:irene_adlers_sitting-room").'
+        in program.source
+    )
     assert "query(candidate_place_1)." in program.source
     assert "evidence(happened_in" in program.source
     assert program.query_symbols == {"candidate_place_1": room_id}
@@ -156,7 +162,7 @@ def test_evaluate_program_raises_when_problog_unavailable(
 ) -> None:
     original_import_module = importlib.import_module
 
-    def fake_import_module(name: str):
+    def fake_import_module(name: str) -> Any:
         if name.startswith("problog"):
             raise ImportError("missing")
         return original_import_module(name)

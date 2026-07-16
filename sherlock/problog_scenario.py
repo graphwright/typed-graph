@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Sequence
-from typing import Any, cast
 
 from base import BaseStatement
 from graph import Graph
@@ -131,7 +130,7 @@ def _supports_observation(graph: Graph, obs: EvidenceObservation) -> bool:
     for inst in graph.by_id.values():
         if not isinstance(inst, BaseStatement):
             continue
-        stmt = cast(BaseStatement[Any, Any], inst)
+        stmt = inst
         if stmt.truth_status != "asserted_true":
             continue
         if _camel_to_snake(type(stmt).__name__) != obs.predicate_symbol:
@@ -155,7 +154,9 @@ def scandal_evidence_lines(
     """
     if graph is None:
         return [obs.to_problog() for obs in observations]
-    return [obs.to_problog() for obs in observations if _supports_observation(graph, obs)]
+    return [
+        obs.to_problog() for obs in observations if _supports_observation(graph, obs)
+    ]
 
 
 def scandal_ranking_rules(
