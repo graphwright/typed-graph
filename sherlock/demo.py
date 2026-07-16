@@ -74,7 +74,9 @@ def _resolve_id_by_text(
     for inst in graph.by_id.values():
         canonical = getattr(inst, "canonical", "")
         aliases = getattr(inst, "aliases", ())
-        haystack = " ".join([inst.id, str(canonical), *(str(a) for a in aliases)]).lower()
+        haystack = " ".join(
+            [inst.id, str(canonical), *(str(a) for a in aliases)]
+        ).lower()
         if all(tok in haystack for tok in token_set):
             matches.append(inst.id)
 
@@ -113,14 +115,16 @@ def _fallback_located_in_pairs(graph: Graph, smoke_id: str) -> set[tuple[str, st
     place_by_event = _event_location_map(graph)
 
     objects_by_person: dict[str, set[str]] = {}
-    for fact in possesses_facts:
-        objects_by_person.setdefault(fact.subject.id, set()).add(fact.object_.id)
+    for possesses_fact in possesses_facts:
+        objects_by_person.setdefault(possesses_fact.subject.id, set()).add(
+            possesses_fact.object_.id
+        )
 
     participants_by_event: dict[str, set[str]] = {}
     smoke_events: set[str] = set()
-    for fact in involves_facts:
-        event_id = fact.subject.id
-        obj_id = fact.object_.id
+    for involves_fact in involves_facts:
+        event_id = involves_fact.subject.id
+        obj_id = involves_fact.object_.id
         participants_by_event.setdefault(event_id, set()).add(obj_id)
         if obj_id == smoke_id:
             smoke_events.add(event_id)
@@ -145,20 +149,21 @@ def _run_rule(engine: Engine, graph: Graph, rule: Rule) -> tuple[Instance, ...]:
         fn = getattr(engine, name, None)
         if fn is None:
             continue
+        runner = cast(Callable[..., Any], fn)
 
-        call_patterns: Tuple[Callable[[], Any], ...] = (
-            lambda f=fn: f(graph=graph, rules=(rule,)),
-            lambda f=fn: f(graph, (rule,)),
-            lambda f=fn: f((rule,), graph),
-            lambda f=fn: f(asserted=tuple(graph.by_id.values()), rules=(rule,)),
-            lambda f=fn: f(tuple(graph.by_id.values()), (rule,)),
-            lambda f=fn: f(rules=(rule,)),
-            lambda f=fn: f((rule,)),
+        call_patterns: Tuple[tuple[tuple[Any, ...], dict[str, Any]], ...] = (
+            ((), {"graph": graph, "rules": (rule,)}),
+            ((graph, (rule,)), {}),
+            (((rule,), graph), {}),
+            ((), {"asserted": tuple(graph.by_id.values()), "rules": (rule,)}),
+            ((tuple(graph.by_id.values()), (rule,)), {}),
+            ((), {"rules": (rule,)}),
+            (((rule,),), {}),
         )
 
-        for call in call_patterns:
+        for args, kwargs in call_patterns:
             try:
-                result: Any = call()
+                result: Any = runner(*args, **kwargs)
             except TypeError as exc:
                 last_error = exc
                 continue
@@ -168,18 +173,27 @@ def _run_rule(engine: Engine, graph: Graph, rule: Rule) -> tuple[Instance, ...]:
             if isinstance(result, tuple) and result and isinstance(result[0], Graph):
                 return tuple(result[0].by_id.values())
             if isinstance(result, dict):
-                return tuple(
-                    x
-                    for x in cast(dict[Any, Any], result).values()
-                    if isinstance(x, Instance)
-                )
+                dict_result = cast(dict[object, object], result)
+                dict_instances: list[Instance] = []
+                for value in dict_result.values():
+                    if isinstance(value, Instance):
+                        dict_instances.append(value)
+                return tuple(dict_instances)
             if isinstance(result, (tuple, list, set)):
-                items = cast(tuple[Any, ...] | list[Any] | set[Any], result)
-                return tuple(x for x in items if isinstance(x, Instance))
+                sequence_result = cast(
+                    tuple[object, ...] | list[object] | set[object], result
+                )
+                sequence_instances: list[Instance] = []
+                for value in sequence_result:
+                    if isinstance(value, Instance):
+                        sequence_instances.append(value)
+                return tuple(sequence_instances)
 
             raise RuntimeError(f"Unsupported Engine result type: {type(result)!r}")
 
-    raise RuntimeError(f"Could not execute datalog Engine API. Last error: {last_error!r}")
+    raise RuntimeError(
+        f"Could not execute datalog Engine API. Last error: {last_error!r}"
+    )
 
 
 def solve_mystery(graph: Graph) -> None:
@@ -287,7 +301,8 @@ def solve_mystery(graph: Graph) -> None:
                 and rush_event in irene_events
                 and carry_event in irene_events
                 and moments_by_event.get(rush_event) is not None
-                and moments_by_event.get(rush_event) == moments_by_event.get(carry_event)
+                and moments_by_event.get(rush_event)
+                == moments_by_event.get(carry_event)
             ):
                 photo_hits = [(photo_id, sitting_room_id)]
 
