@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from sherlock.importer import load_story_graph
-from sherlock.schema import Event, Involves, Moment, Person
+from sherlock.schema import Event, HappenedIn, Involves, Moment, Person
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -168,3 +168,15 @@ def test_load_story_graph_real_dataset_if_available() -> None:
     assert report.statements_loaded > 0
     holmes = graph.get("wiki:Sherlock_Holmes")
     assert isinstance(holmes, Person)
+
+
+def test_load_story_graph_adds_carry_event_location_hint_if_available() -> None:
+    dataset_dir = Path(__file__).resolve().parents[1] / "sherlock" / "data"
+    if not dataset_dir.exists():
+        pytest.skip("Vendored dataset sherlock/data not available in this environment")
+
+    graph, _report = load_story_graph(dataset_dir)
+    hinted_edges = graph.edges_from(
+        "sib:event:holmes_carried_into_sitting_room", pred_type=HappenedIn
+    )
+    assert any(edge.object_.id == "place:irene_adlers_sitting-room" for edge in hinted_edges)

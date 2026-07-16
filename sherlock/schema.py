@@ -84,6 +84,14 @@ class LocatedIn(StoryStatement[Location, Location], Transitive):
     """A transitive containment/location relation."""
 
 
+class HappenedIn(StoryStatement[Event, Location]):
+    """An event took place in a location.
+
+    This captures event->place structure that is often only implicit in event
+    identifiers/descriptions from extraction output.
+    """
+
+
 class PhysicallyIn(BaseStatement[Object, Location]):
     """An object is physically located in a place.
 

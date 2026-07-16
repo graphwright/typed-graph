@@ -12,6 +12,7 @@ from graph import Graph
 from sherlock.schema import (
     AssociatedWith,
     Event,
+    HappenedIn,
     Involves,
     Knows,
     LocatedIn,
@@ -70,6 +71,15 @@ _PREDICATE_MAP: dict[str, PredicateType] = {
     "AssociatedWith": AssociatedWith,
     "Knows": Knows,
     "LocatedIn": LocatedIn,
+    "HappenedIn": HappenedIn,
+}
+
+# Curated event->location hints for places that appear in event ids/descriptions
+# but are not emitted as explicit triplets in the source dataset.
+_EVENT_LOCATION_HINTS: dict[str, str] = {
+    "sib:event:holmes_carried_into_sitting_room": "place:irene_adlers_sitting-room",
+    "sib:event:irene_grants_permission_sitting_room": "place:irene_adlers_sitting-room",
+    "sib:event:norton_paces_sitting_room": "place:irene_adlers_sitting-room",
 }
 
 
@@ -271,6 +281,39 @@ def load_story_graph(
             raw_extraction_method=raw_method,
         )
         statements.append(stmt)
+        statements_loaded += 1
+
+    existing_statement_ids = {stmt.id for stmt in statements}
+    for event_id, location_id in _EVENT_LOCATION_HINTS.items():
+        event = registry.get(event_id)
+        location = registry.get(location_id)
+        if not isinstance(event, Event) or not isinstance(location, Location):
+            continue
+
+        stmt_id = f"stmt:{event_id}:HappenedIn:{location_id}"
+        if stmt_id in existing_statement_ids:
+            continue
+
+        statements.append(
+            HappenedIn(
+                id=stmt_id,
+                subject=event,
+                object_=location,
+                truth_status="asserted_true",
+                provenance=(
+                    Provenance(
+                        source=(
+                            f"{triplets_path.name}:{stmt_id}:"
+                            "importer-event-location-hint"
+                        ),
+                        extraction_method="inferred",
+                    ),
+                ),
+                story_id=story_prefix,
+                raw_extraction_method="importer-event-location-hint",
+            )
+        )
+        existing_statement_ids.add(stmt_id)
         statements_loaded += 1
 
     graph = Graph()

@@ -77,6 +77,15 @@ def test_shared_node_emitted_once() -> None:
     assert src.count('Person(id="alice"') == 1
 
 
+def test_shared_statement_node_emitted_once() -> None:
+    # A statement reused as a higher-order object should still have one assignment.
+    wf = WorksFor(id="wf1", subject=alice, object_=acme)
+    believes_bob = Believes(id="b1", subject=bob, object_=wf)
+    believes_alice = Believes(id="b2", subject=alice, object_=wf)
+    src = serialize.to_python([believes_bob, believes_alice])
+    assert src.count("wf1 = WorksFor(") == 1
+
+
 def test_punctuated_id_is_sanitized_and_roundtrips() -> None:
     holmes = Person(id="wiki:Sherlock_Holmes", name="Sherlock Holmes")
     wf = WorksFor(id="w2", subject=holmes, object_=acme)

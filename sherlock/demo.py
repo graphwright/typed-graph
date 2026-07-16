@@ -25,6 +25,7 @@ from serialize import to_python
 from sherlock.importer import load_story_graph
 from sherlock.schema import (
     AssociatedWith,
+    HappenedIn,
     Involves,
     OccurredAt,
     PhysicallyIn,
@@ -141,7 +142,8 @@ def solve_mystery(graph: Graph) -> None:
 
     # Range-restricted, correctly typed Horn clause over real predicates:
     #   PhysicallyIn(o, room) :-
-    #       Possesses(p, o), Involves(e, p), OccurredAt(e, m), AssociatedWith(p, room)
+    #       Possesses(p, o), Involves(e, p), OccurredAt(e, m),
+    #       AssociatedWith(p, room), HappenedIn(e, room)
     p, o, e, m, room = variables("p o e m room")
     rule = Rule(
         lit(PhysicallyIn, o, room),
@@ -150,6 +152,7 @@ def solve_mystery(graph: Graph) -> None:
             lit(Involves, e, p),
             lit(OccurredAt, e, m),
             lit(AssociatedWith, p, room),
+            lit(HappenedIn, e, room),
         ),
     )
 
