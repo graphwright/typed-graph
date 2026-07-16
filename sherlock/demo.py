@@ -1,4 +1,12 @@
-"""Demo loader for Sherlock JSONL data vendored in this repository."""
+"""Demo loader for Sherlock JSONL data vendored in this repository.
+
+The mystery demo (`solve_mystery`) runs a genuine Horn clause through the
+datalog Engine's real API (`add_facts` -> `add_rule` -> `infer`). It reports the
+candidate hiding places that *deduction alone* supports, and is explicit about
+what deduction cannot do: it cannot, on the current dataset, single out one
+place, because the graph contains no edge tying the reveal event to a location.
+Ranking the candidates is exactly the job for the probabilistic layer.
+"""
 
 from __future__ import annotations
 
@@ -6,19 +14,22 @@ import argparse
 import os
 from collections import Counter
 from pathlib import Path
-
-from typing import Any, Tuple, TypeVar, Callable, cast
+from typing import cast
 
 from datalog import Engine
 from rules import Rule, lit, variables
-from sherlock.schema import Event, Involves, LocatedIn, OccurredAt, Possesses
 
-from base import Instance
+from base import AnyStmt, BaseStatement, Instance
 from graph import Graph
 from serialize import to_python
 from sherlock.importer import load_story_graph
-
-P = TypeVar("P")
+from sherlock.schema import (
+    AssociatedWith,
+    Involves,
+    OccurredAt,
+    PhysicallyIn,
+    Possesses,
+)
 
 
 def _count_entity_types(graph: Graph) -> Counter[str]:
@@ -85,237 +96,106 @@ def _resolve_id_by_text(
     return sorted(matches)[0]
 
 
-def _event_location_map(graph: Graph) -> dict[str, str]:
-    """Map event_id -> location_id via LocatedIn(event, location), else OccurredAt fallback."""
-    place_by_event: dict[str, str] = {}
+def _asserted_facts(graph: Graph) -> list[AnyStmt]:
+    """Every statement in the graph, in stable id order.
 
-    for inst in graph.by_id.values():
-        if isinstance(inst, LocatedIn) and isinstance(inst.subject, Event):
-            place_by_event[inst.subject.id] = inst.object_.id
-
-    if place_by_event:
-        return place_by_event
-
-    for inst in graph.by_id.values():
-        if isinstance(inst, OccurredAt):
-            place_by_event[inst.subject.id] = inst.object_.id
-    return place_by_event
-
-
-def _fallback_located_in_pairs(graph: Graph, smoke_id: str) -> set[tuple[str, str]]:
-    """Naive join fallback for:
-    LocatedIn(o, L) :- Possesses(p, o), Involves(e, p), Involves(e, smoke), EventAtPlace(e, L)
+    The engine's ``add_facts`` reasons only over ``asserted_true`` statements
+    (it skips ``hypothetical`` and ``disputed`` ones and returns the skip
+    count), so passing the whole set is safe -- sorting keeps derivation order
+    deterministic across runs.
     """
-    possesses_facts = tuple(
-        inst for inst in graph.by_id.values() if isinstance(inst, Possesses)
-    )
-    involves_facts = tuple(
-        inst for inst in graph.by_id.values() if isinstance(inst, Involves)
-    )
-    place_by_event = _event_location_map(graph)
-
-    objects_by_person: dict[str, set[str]] = {}
-    for possesses_fact in possesses_facts:
-        objects_by_person.setdefault(possesses_fact.subject.id, set()).add(
-            possesses_fact.object_.id
-        )
-
-    participants_by_event: dict[str, set[str]] = {}
-    smoke_events: set[str] = set()
-    for involves_fact in involves_facts:
-        event_id = involves_fact.subject.id
-        obj_id = involves_fact.object_.id
-        participants_by_event.setdefault(event_id, set()).add(obj_id)
-        if obj_id == smoke_id:
-            smoke_events.add(event_id)
-
-    inferred: set[tuple[str, str]] = set()
-    for event_id in smoke_events:
-        place_id = place_by_event.get(event_id)
-        if place_id is None:
-            continue
-        for person_id in participants_by_event.get(event_id, set()):
-            for object_id in objects_by_person.get(person_id, set()):
-                inferred.add((object_id, place_id))
-    return inferred
+    facts: list[AnyStmt] = []
+    for inst in graph.by_id.values():
+        if isinstance(inst, BaseStatement):
+            facts.append(cast(AnyStmt, inst))
+    return sorted(facts, key=lambda stmt: stmt.id)
 
 
-def _run_rule(engine: Engine, graph: Graph, rule: Rule) -> tuple[Instance, ...]:
-    """Run one rule against a graph across known Engine API variants."""
-    methods = ("deduce", "infer", "run")
-    last_error: Exception | None = None
-
-    for name in methods:
-        fn = getattr(engine, name, None)
-        if fn is None:
-            continue
-        runner = cast(Callable[..., Any], fn)
-
-        call_patterns: Tuple[tuple[tuple[Any, ...], dict[str, Any]], ...] = (
-            ((), {"graph": graph, "rules": (rule,)}),
-            ((graph, (rule,)), {}),
-            (((rule,), graph), {}),
-            ((), {"asserted": tuple(graph.by_id.values()), "rules": (rule,)}),
-            ((tuple(graph.by_id.values()), (rule,)), {}),
-            ((), {"rules": (rule,)}),
-            (((rule,),), {}),
-        )
-
-        for args, kwargs in call_patterns:
-            try:
-                result: Any = runner(*args, **kwargs)
-            except TypeError as exc:
-                last_error = exc
-                continue
-
-            if isinstance(result, Graph):
-                return tuple(result.by_id.values())
-            if isinstance(result, tuple) and result and isinstance(result[0], Graph):
-                return tuple(result[0].by_id.values())
-            if isinstance(result, dict):
-                dict_result = cast(dict[object, object], result)
-                dict_instances: list[Instance] = []
-                for value in dict_result.values():
-                    if isinstance(value, Instance):
-                        dict_instances.append(value)
-                return tuple(dict_instances)
-            if isinstance(result, (tuple, list, set)):
-                sequence_result = cast(
-                    tuple[object, ...] | list[object] | set[object], result
-                )
-                sequence_instances: list[Instance] = []
-                for value in sequence_result:
-                    if isinstance(value, Instance):
-                        sequence_instances.append(value)
-                return tuple(sequence_instances)
-
-            raise RuntimeError(f"Unsupported Engine result type: {type(result)!r}")
-
-    raise RuntimeError(
-        f"Could not execute datalog Engine API. Last error: {last_error!r}"
-    )
+def _name(graph: Graph, entity_id: str) -> str:
+    inst = graph.by_id.get(entity_id)
+    return str(getattr(inst, "canonical", entity_id)) if inst is not None else entity_id
 
 
 def solve_mystery(graph: Graph) -> None:
-    """Use a hand-crafted Horn clause to infer where the photograph is hidden."""
-    smoke_pref = os.environ.get("SHERLOCK_SMOKE_ID", "obj:plumbers_smoke-rocket")
-    photo_pref = os.environ.get("SHERLOCK_PHOTO_ID", "obj:irene_adlers_photograph")
+    """Deduce where the photograph could be, honestly.
 
-    smoke_id = _resolve_id_by_text(graph, smoke_pref, ("smoke", "rocket"))
-    photo_id = _resolve_id_by_text(graph, photo_pref, ("photo",))
+    The Horn clause below says: an object is physically in a place if its
+    possessor is involved in some event that occurred at some moment, and that
+    possessor is associated with the place. This runs through the *real* Engine
+    API -- no adapters, no fallbacks. If the rule cannot fire, the demo says so
+    and stops; it never substitutes a hard-coded answer.
 
-    if smoke_id is None:
-        print(
-            "Could not solve mystery: could not resolve smoke rocket id "
-            f"(preferred={smoke_pref})"
-        )
-        return
+    Deduction yields the *set* of places the possessor is associated with. It
+    cannot, on this dataset, narrow to one: the graph has no edge linking the
+    reveal event to a location (the source triplets contain no event->location
+    predicate at all), so the discriminating signal Doyle's readers use -- the
+    sitting room is where Holmes is carried at the very moment Irene bolts to
+    the photograph -- is not present as a fact. Picking the sitting room out of
+    the candidate set is a ranking problem, which is where probabilistic
+    inference (evidence conditioning on the shared reveal-moment) comes in.
+    """
+    photo_id = _resolve_id_by_text(graph, "obj:irene_adlers_photograph", ("photo",))
     if photo_id is None:
-        print(
-            "Could not solve mystery: could not resolve photograph id "
-            f"(preferred={photo_pref})"
-        )
+        print("Could not solve mystery: could not resolve the photograph id.")
         return
 
-    smoke = graph.by_id[smoke_id]
-
-    e, p, o, L = variables("e p o L")
+    # Range-restricted, correctly typed Horn clause over real predicates:
+    #   PhysicallyIn(o, room) :-
+    #       Possesses(p, o), Involves(e, p), OccurredAt(e, m), AssociatedWith(p, room)
+    p, o, e, m, room = variables("p o e m room")
     rule = Rule(
-        lit(LocatedIn, o, L),
+        lit(PhysicallyIn, o, room),
         (
             lit(Possesses, p, o),
             lit(Involves, e, p),
-            lit(Involves, e, smoke),
-            lit(OccurredAt, e, L),
+            lit(OccurredAt, e, m),
+            lit(AssociatedWith, p, room),
         ),
     )
 
-    print("Mystery demo (Horn clause)")
+    print("Mystery demo (Horn clause, real datalog engine)")
     print(f"  {rule!r}")
 
-    photo_hits: list[tuple[str, str]] = []
+    engine = Engine(max_iterations=64)
+    skipped = engine.add_facts(_asserted_facts(graph))
+    engine.add_rule(rule)
+    derived = engine.infer()
 
-    try:
-        engine = Engine(max_iterations=64)
-        inferred_instances = _run_rule(engine, graph, rule)
-        inferred_located_in: tuple[LocatedIn, ...] = tuple(
-            fact for fact in inferred_instances if isinstance(fact, LocatedIn)
-        )
-        photo_hits = sorted(
-            (
-                (fact.subject.id, fact.object_.id)
-                for fact in inferred_located_in
-                if fact.subject.id == photo_id
-            ),
-            key=lambda pair: pair[1],
-        )
-    except RuntimeError as exc:
-        print(f"Engine adapter failed ({exc}); using fallback evaluator.")
-        inferred_pairs = _fallback_located_in_pairs(graph, smoke_id)
-        photo_hits = sorted(
-            (pair for pair in inferred_pairs if pair[0] == photo_id),
-            key=lambda pair: pair[1],
-        )
+    photo_places = sorted(
+        fact.object_.id
+        for fact in derived
+        if isinstance(fact, PhysicallyIn) and fact.subject.id == photo_id
+    )
 
-    if not photo_hits:
-        # Dataset-compatible clue path:
-        # If Irene possesses the photograph and the event where she rushes to it
-        # happens at the same moment as Holmes being carried into the sitting room,
-        # infer the photograph is in Irene Adler's sitting room.
-        irene_id = _resolve_id_by_text(graph, "wiki:Irene_Adler", ("irene", "adler"))
-        sitting_room_id = _resolve_id_by_text(
-            graph,
-            "place:irene_adlers_sitting-room",
-            ("sitting-room", "irene"),
-        )
+    print(
+        f"  loaded facts (skipped {skipped} non-asserted), "
+        f"derived {len(derived)} new statements"
+    )
 
-        if irene_id is not None and sitting_room_id is not None:
-            involves_facts = tuple(
-                inst for inst in graph.by_id.values() if isinstance(inst, Involves)
-            )
-            occurred_at_facts = tuple(
-                inst for inst in graph.by_id.values() if isinstance(inst, OccurredAt)
-            )
-            possesses_facts = tuple(
-                inst for inst in graph.by_id.values() if isinstance(inst, Possesses)
-            )
-
-            moments_by_event: dict[str, str] = {
-                fact.subject.id: fact.object_.id for fact in occurred_at_facts
-            }
-            irene_events = {
-                fact.subject.id
-                for fact in involves_facts
-                if fact.object_.id == irene_id
-            }
-
-            has_possession = any(
-                fact.subject.id == irene_id and fact.object_.id == photo_id
-                for fact in possesses_facts
-            )
-            rush_event = "sib:event:adler_rushes_to_photograph"
-            carry_event = "sib:event:holmes_carried_into_sitting_room"
-
-            if (
-                has_possession
-                and rush_event in irene_events
-                and carry_event in irene_events
-                and moments_by_event.get(rush_event) is not None
-                and moments_by_event.get(rush_event)
-                == moments_by_event.get(carry_event)
-            ):
-                photo_hits = [(photo_id, sitting_room_id)]
-
-    if not photo_hits:
-        print("No inferred hiding place for the photograph.")
+    if not photo_places:
+        print("Deduction derived no hiding place for the photograph.")
         return
 
-    for object_id, place_id in photo_hits:
-        obj = graph.by_id.get(object_id)
-        place = graph.by_id.get(place_id)
-        obj_name = getattr(obj, "canonical", object_id)
-        place_name = getattr(place, "canonical", place_id)
-        print(f"Inferred: {obj_name} is at {place_name}")
+    if len(photo_places) == 1:
+        place_id = photo_places[0]
+        print(
+            f"Deduced uniquely: {_name(graph, photo_id)} "
+            f"is in {_name(graph, place_id)}"
+        )
+        return
+
+    print(
+        f"Deduction narrows {_name(graph, photo_id)} to "
+        f"{len(photo_places)} candidate places (it cannot rank them):"
+    )
+    for place_id in photo_places:
+        print(f"  - {_name(graph, place_id)}  ({place_id})")
+    print(
+        "\nSingling out the sitting room needs information the graph does not "
+        "hold as a fact: the reveal event carries its location only in its "
+        "name, never as an edge. That is a ranking problem for the "
+        "probabilistic layer, not a gap deduction can close."
+    )
 
 
 def _load_graph_from_env() -> Graph:
