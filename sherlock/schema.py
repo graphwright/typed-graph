@@ -82,3 +82,18 @@ class Knows(StoryStatement[Person, Person], Symmetric):
 
 class LocatedIn(StoryStatement[Location, Location], Transitive):
     """A transitive containment/location relation."""
+
+
+class PhysicallyIn(BaseStatement[Object, Location]):
+    """An object is physically located in a place.
+
+    This is a *derivable* predicate, not an extracted one: it is produced by
+    inference (e.g. the mystery Horn clause), never imported from a triplet row.
+    It therefore subclasses ``BaseStatement`` directly rather than
+    ``StoryStatement`` -- an inferred fact has no story-extraction metadata
+    (no ``story_id``, paragraph index, or extraction confidence), and requiring
+    those fields would make it impossible for the datalog engine to construct a
+    derived head. Keeping extracted and inferred predicates on separate branches
+    of the hierarchy is the honest ontology: provenance-of-extraction belongs
+    only to things that were extracted.
+    """
