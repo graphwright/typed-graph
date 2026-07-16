@@ -171,30 +171,59 @@ The output is executable Python that reconstructs the exact graph when run. This
 it straightforward to save a graph to a `.py` file and reload it with a plain
 `exec`/`import`.
 
-## Sherlock Mystery Demo
+## Solve-and-ProbLog Pipeline
 
-The Sherlock subproject includes a runnable demo that now solves the central
-"where is the photograph hidden?" mystery from *A Scandal in Bohemia*.
+The Sherlock subproject is a worked reasoning demo for *A Scandal in Bohemia*.
+The concrete question is the story's central mystery: where is Irene Adler's
+incriminating photograph hidden?
 
-Run from the repository root:
+The Sherlock mystery flow is intentionally split into two stages:
+
+1. Deterministic solve (Horn clause via `datalog.Engine`)
+2. Probabilistic ranking (ProbLog, optional)
+
+The deterministic stage computes candidate places that are logically supported by
+asserted facts. On the current dataset, deduction can narrow the candidate set but
+cannot always select a unique winner. The probabilistic stage then ranks those
+candidates using curated primitive random variables and evidence conditioning.
+
+This keeps the core typed-graph + Datalog model transparent and truth-preserving,
+while still supporting best-explanation ranking when the graph underdetermines a
+single answer.
+
+## Running the Mystery Modes
+
+Run from the repository root.
+
+Default import summary mode:
 
 ```bash
-SOLVE_MYSTERY=1 pdm run python -m sherlock.demo
+uv run python -m sherlock.demo
 ```
 
-Expected output includes a final inference line like:
+Deterministic mystery solve (Horn clause only):
 
-```text
-Inferred: Irene Adler's photograph is at Irene Adler's sitting-room
+```bash
+SOLVE_MYSTERY=1 uv run python -m sherlock.demo
 ```
 
-Notes:
+Probabilistic ranking mode (requires optional `problog` install):
 
-- The demo first attempts a hand-written Horn clause through `datalog.Engine`.
-- If the current dataset shape does not satisfy that exact rule body, it falls
-    back to a dataset-compatible clue-chain inference.
-- Entity constants are resolved robustly by exact id first, then tokenized
-    canonical/alias matching.
+```bash
+SOLVE_MYSTERY_PROBLOG=1 uv run python -m sherlock.demo
+```
+
+Optional dataset controls:
+
+```bash
+SHERLOCK_DATASET_DIR=./sherlock/data SHERLOCK_STORY_PREFIX=bohemia uv run python -m sherlock.demo
+```
+
+Suggested verification for the probabilistic layer:
+
+```bash
+uv run pytest tests/test_sherlock_problog_adapter.py tests/test_sherlock_problog_scenario.py
+```
 
 ---
 
@@ -345,3 +374,31 @@ rules, so they and hand-written `Rule`s share one evaluator. Each derived head i
 constructed through its predicate class, so domain/range are validated exactly as for
 any statement. Rules are built directly in Python — there is deliberately no text
 grammar or parser. See `formal-defns.md` §Trait vocabulary for the formal treatment.
+
+### ProbLog when deduction is not enough
+
+`Rule` is the escape hatch for deterministic logical inference. When deduction returns
+multiple plausible candidates (as in the Sherlock mystery), the optional ProbLog layer
+provides ranking by conditioning on evidence over a small set of primitive random
+variables. In other words: keep Horn clauses for what must follow, then use ProbLog
+for what is most likely among the remaining possibilities. See [docs/problog.md](docs/problog.md) for the design note and [sherlock/problog_adapter.py](sherlock/problog_adapter.py) for the adapter used by the demo.
+
+Example (ProbLog syntax):
+
+```prolog
+% Deterministic Horn clause (always true when body is true)
+physically_in(O, Place) :-
+    possesses(P, O),
+    associated_with(P, Place),
+    happened_in(E, Place),
+    involves(E, P).
+
+% Probabilistic Horn clause (fires with probability 0.98)
+0.98::photo_in_place(Place) :-
+    reveal_coincidence_place(Place),
+    alarm_reveal_moment,
+    carry_event_feasible.
+```
+
+Read this as: if the body is satisfied, then `photo_in_place(Place)` is generated as
+an uncertain conclusion with weight 0.98, rather than as a guaranteed fact.
