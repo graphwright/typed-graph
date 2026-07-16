@@ -23,6 +23,18 @@ from base import AnyStmt, BaseStatement, Instance
 from graph import Graph
 from serialize import to_python
 from sherlock.importer import load_story_graph
+from sherlock.problog_adapter import (
+    ProbLogUnavailableError,
+    build_candidate_place_program,
+    evaluate_program,
+    evaluate_candidate_place_marginals,
+)
+from sherlock.problog_scenario import (
+    scandal_evidence_lines,
+    scandal_explanatory_rules,
+    scandal_primitive_lines,
+    scandal_ranking_rules,
+)
 from sherlock.schema import (
     AssociatedWith,
     HappenedIn,
@@ -117,6 +129,34 @@ def _name(graph: Graph, entity_id: str) -> str:
     return str(getattr(inst, "canonical", entity_id)) if inst is not None else entity_id
 
 
+def _photo_candidate_places_via_rule(
+    graph: Graph, photo_id: str, *, require_happened_in: bool
+) -> tuple[int, list[str]]:
+    """Run the mystery Horn clause and return (skipped_facts, candidate places)."""
+    p, o, e, m, room = variables("p o e m room")
+    body = [
+        lit(Possesses, p, o),
+        lit(Involves, e, p),
+        lit(OccurredAt, e, m),
+        lit(AssociatedWith, p, room),
+    ]
+    if require_happened_in:
+        body.append(lit(HappenedIn, e, room))
+    rule = Rule(lit(PhysicallyIn, o, room), tuple(body))
+
+    engine = Engine(max_iterations=64)
+    skipped = engine.add_facts(_asserted_facts(graph))
+    engine.add_rule(rule)
+    derived = engine.infer()
+
+    photo_places = sorted(
+        fact.object_.id
+        for fact in derived
+        if isinstance(fact, PhysicallyIn) and fact.subject.id == photo_id
+    )
+    return skipped, photo_places
+
+
 def solve_mystery(graph: Graph) -> None:
     """Deduce where the photograph could be, honestly.
 
@@ -140,39 +180,20 @@ def solve_mystery(graph: Graph) -> None:
         print("Could not solve mystery: could not resolve the photograph id.")
         return
 
-    # Range-restricted, correctly typed Horn clause over real predicates:
-    #   PhysicallyIn(o, room) :-
-    #       Possesses(p, o), Involves(e, p), OccurredAt(e, m),
-    #       AssociatedWith(p, room), HappenedIn(e, room)
-    p, o, e, m, room = variables("p o e m room")
-    rule = Rule(
-        lit(PhysicallyIn, o, room),
-        (
-            lit(Possesses, p, o),
-            lit(Involves, e, p),
-            lit(OccurredAt, e, m),
-            lit(AssociatedWith, p, room),
-            lit(HappenedIn, e, room),
-        ),
+    print("Mystery demo (Horn clause, real datalog engine)")
+    print(
+        "  Rule: PhysicallyIn(o, room) :- "
+        "Possesses(p, o), Involves(e, p), OccurredAt(e, m), "
+        "AssociatedWith(p, room), HappenedIn(e, room)"
     )
 
-    print("Mystery demo (Horn clause, real datalog engine)")
-    print(f"  {rule!r}")
-
-    engine = Engine(max_iterations=64)
-    skipped = engine.add_facts(_asserted_facts(graph))
-    engine.add_rule(rule)
-    derived = engine.infer()
-
-    photo_places = sorted(
-        fact.object_.id
-        for fact in derived
-        if isinstance(fact, PhysicallyIn) and fact.subject.id == photo_id
+    skipped, photo_places = _photo_candidate_places_via_rule(
+        graph, photo_id, require_happened_in=True
     )
 
     print(
         f"  loaded facts (skipped {skipped} non-asserted), "
-        f"derived {len(derived)} new statements"
+        f"candidate places from rule: {len(photo_places)}"
     )
 
     if not photo_places:
@@ -199,6 +220,66 @@ def solve_mystery(graph: Graph) -> None:
         "name, never as an edge. That is a ranking problem for the "
         "probabilistic layer, not a gap deduction can close."
     )
+
+
+def solve_mystery_problog(graph: Graph) -> None:
+    """Optional ProbLog-backed evaluator over the same graph and rule structure."""
+    photo_id = _resolve_id_by_text(graph, "obj:irene_adlers_photograph", ("photo",))
+    if photo_id is None:
+        print("Could not run probabilistic mystery demo: photograph id not found.")
+        return
+
+    skipped, photo_places = _photo_candidate_places_via_rule(
+        graph, photo_id, require_happened_in=False
+    )
+    if not photo_places:
+        print("Probabilistic demo: deduction produced no candidate places to rank.")
+        return
+
+    print("Mystery demo (ProbLog adapter, optional evaluator)")
+    print(f"  candidates from deduction: {len(photo_places)} (skipped {skipped} facts)")
+
+    primitive_lines = [
+        *scandal_primitive_lines(),
+        *scandal_explanatory_rules(),
+        *scandal_ranking_rules(),
+    ]
+    evidence_lines = scandal_evidence_lines(graph)
+    print(f"  conditioning evidence lines: {len(evidence_lines)}")
+
+    program = build_candidate_place_program(
+        graph,
+        object_id=photo_id,
+        candidate_place_ids=photo_places,
+        query_predicate="photo_in_place",
+        query_arity=1,
+        primitive_lines=primitive_lines,
+        evidence_lines=evidence_lines,
+    )
+
+    try:
+        query_result = evaluate_program(program.source)
+    except ProbLogUnavailableError as exc:
+        print(f"  ProbLog unavailable: {exc}")
+        print("  Emitted ProbLog program follows for inspection:")
+        print(program.source)
+        return
+
+    _, marginals = evaluate_candidate_place_marginals(
+        graph,
+        object_id=photo_id,
+        candidate_place_ids=photo_places,
+        query_predicate="photo_in_place",
+        query_arity=1,
+        primitive_lines=primitive_lines,
+        evidence_lines=evidence_lines,
+        evaluator=lambda _source: query_result,
+    )
+
+    ranked = sorted(marginals.items(), key=lambda item: item[1], reverse=True)
+    print("  ranked candidates:")
+    for place_id, prob in ranked:
+        print(f"    {_name(graph, place_id)} ({place_id}): {prob:.6f}")
 
 
 def _load_graph_from_env() -> Graph:
@@ -272,6 +353,8 @@ def main() -> None:
 if __name__ == "__main__":
     if os.environ.get("ENTIRE_GRAPH"):
         serialize_entire_sherlock_graph()
+    elif os.environ.get("SOLVE_MYSTERY_PROBLOG"):
+        solve_mystery_problog(_load_graph_from_env())
     elif os.environ.get("SOLVE_MYSTERY"):
         solve_mystery(_load_graph_from_env())
     else:

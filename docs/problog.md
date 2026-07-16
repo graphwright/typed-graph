@@ -268,6 +268,23 @@ ranking the improbable remainder — the two halves of the famous maxim — are
 "eliminate possibilities" behavior we needed lives *inside* the probabilistic
 framework; we do not need a separate constraint layer for the basic case.
 
+### Is this hypothesis testing?
+
+Very close in spirit, but not the same machinery.
+
+What Step 4 does is **Bayesian updating**:
+
+- Step 3 gives priors (e.g., `0.85::irene_alarm_response.`).
+- Step 4 adds observations as evidence (e.g., `evidence(occurred_at(...), true).`).
+- ProbLog computes posteriors by conditioning: from $P(H)$ to $P(H \mid E)$,
+  where $H$ is a hypothesis ("the photograph is in place X") and $E$ is what we observed.
+
+Classical null-hypothesis significance testing (NHST) asks a different question:
+whether data are surprising under a null model (p-values, reject/fail-to-reject).
+Our workflow asks for **direct probabilities over competing hypotheses after
+conditioning on evidence**. That is exactly why it feels so rewarding here: it
+maps naturally to detective reasoning as explanation-ranking under uncertainty.
+
 ### There is a Python library
 
 ProbLog ships as a `pip`-installable Python package (`pip install problog`). The
@@ -365,7 +382,8 @@ them. Going the rest of the way is abduction — inference to the best explanati
 independent primitives, the distribution semantics for correct global inference,
 and evidence conditioning as the mechanized form of "eliminate the impossible,
 then rank whatever remains." It ships as a Python library with a one-function
-integration surface.
+integration surface. For readers coming from statistics, see "Is this
+hypothesis testing?" above for a concise Bayesian-vs-NHST framing.
 
 Holmes would approve — not because the answer is certain, but because every step
 of it is *grounded*. Uncertainty is allowed; guessing is not. That is the

@@ -1,9 +1,20 @@
 """Sherlock-specific schema and dataset importer."""
 
 from sherlock.importer import ImportReport, load_story_graph
+from sherlock.problog_scenario import (
+    EvidenceObservation,
+    PrimitiveRandomVariable,
+    SCANDAL_EVIDENCE,
+    SCANDAL_PRIMITIVES,
+    scandal_evidence_lines,
+    scandal_explanatory_rules,
+    scandal_primitive_lines,
+    scandal_ranking_rules,
+)
 from sherlock.schema import (
     AssociatedWith,
     Event,
+    HappenedIn,
     Involves,
     Knows,
     LocatedIn,
@@ -21,6 +32,8 @@ from sherlock.schema import (
 __all__ = [
     "AssociatedWith",
     "Event",
+    "EvidenceObservation",
+    "HappenedIn",
     "ImportReport",
     "Involves",
     "Knows",
@@ -32,7 +45,14 @@ __all__ = [
     "Organization",
     "OtherEntity",
     "Person",
+    "PrimitiveRandomVariable",
     "Possesses",
+    "SCANDAL_PRIMITIVES",
+    "SCANDAL_EVIDENCE",
     "StoryStatement",
     "load_story_graph",
+    "scandal_evidence_lines",
+    "scandal_explanatory_rules",
+    "scandal_primitive_lines",
+    "scandal_ranking_rules",
 ]
