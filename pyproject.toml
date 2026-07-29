@@ -1,0 +1,31 @@
+[project]
+name = "typed-graph-sherlock"
+version = "0.1.0"
+description = "Sherlock Holmes domain built on tg-core"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.13.4",
+    "ruff>=0.15.21",
+    "tg-core",
+]
+
+[dependency-groups]
+dev = [
+    "black>=26.5.1",
+    "mypy>=2.3.0",
+    "pytest>=9.1.1",
+]
+
+[tool.black]
+target-version = ["py312"]
+
+[tool.mypy]
+mypy_path = "../tg-core"
+explicit_package_bases = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.uv.sources]
+tg-core = { path = "../tg-core", editable = true }
