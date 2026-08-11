@@ -5,11 +5,13 @@ description = "Python base package for typed graph"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "pydantic>=2.13.4",
+]
+
+[project.optional-dependencies]
+reasoning = [
     "datalog>=0.7.8",
     "problog>=2.2.10",
-    "pydantic>=2.13.4",
-    "rg>=0.0.76",
-    "ruff>=0.15.21",
 ]
 
 [dependency-groups]
@@ -17,6 +19,8 @@ dev = [
     "black>=26.5.1",
     "mypy>=2.3.0",
     "pytest>=9.1.1",
+    "rg>=0.0.76",
+    "ruff>=0.15.21",
 ]
 
 [tool.black]
