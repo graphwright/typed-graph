@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: graph-api-config
+data:
+  # uvicorn's CLI reads UVICORN_-prefixed env vars automatically.
+  UVICORN_LOG_LEVEL: "info"
+  UVICORN_PORT: "8000"

@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: graph-api
+  labels:
+    app: graph-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: graph-api
+  template:
+    metadata:
+      labels:
+        app: graph-api
+    spec:
+      containers:
+        - name: graph-api
+          image: tg-core-graph-api:local
+          imagePullPolicy: IfNotPresent # image is built locally, never pulled from a registry
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: graph-api-config
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3

@@ -1,0 +1,17 @@
+services:
+  graph-api:
+    build:
+      context: ..
+      dockerfile: k8s-exercise/Dockerfile
+    image: tg-core-graph-api:local
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request as u; u.urlopen("http://localhost:8000/healthz")
+      interval: 10s
+      timeout: 3s
+      retries: 3

@@ -1,3 +1,4 @@
 {
-  "postCreateCommand": "npm install -g @anthropic-ai/claude-code"
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code",
+  "forwardPorts": [8000]
 }
