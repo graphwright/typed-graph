@@ -50,6 +50,78 @@ From here: poke at it with `kubectl get/describe/logs/exec`, put an Ingress
 in front of it, then try `kompose convert` on `docker-compose.yml` to see
 how it compares to the hand-written manifests above.
 
+## Run via Pulumi (`pulumi/` — a code-first alternative to the YAML above)
+
+[`pulumi/__main__.py`](pulumi/__main__.py) is a line-for-line Python port of
+`configmap.yaml` + `deployment.yaml` + `service.yaml`: same resource names,
+same fields, so it's a drop-in alternative to `kubectl apply -f ...` rather
+than a different design. The Kubernetes provider (`pulumi_kubernetes`) maps
+each YAML `kind` to a typed Python class (`k8s.apps.v1.Deployment`,
+`k8s.core.v1.Service`, ...) constructed with `*Args` dataclasses instead of
+indented YAML — real loops/conditionals/functions and IDE completion are
+available if the exercise grows past three static resources.
+
+As of the last time this was run, the live minikube cluster's `graph-api` /
+`graph-api-config` Deployment/Service/ConfigMap are **owned by Pulumi**, not
+by the raw manifests — they were `kubectl delete`d and re-created via
+`pulumi up` to prove the port is real. `configmap.yaml`/`deployment.yaml`/
+`service.yaml` still exist for comparison/reference but re-applying them
+with `kubectl apply` would fight Pulumi for ownership of the same names.
+
+### First-time setup (fresh machine / fresh container)
+
+```bash
+# Pulumi CLI + a local (no-account) state backend -- one time only
+curl -fsSL https://get.pulumi.com | sh
+export PATH="$HOME/.pulumi/bin:$PATH"     # installer also appends this to ~/.bashrc
+pulumi login --local                       # do this alone, see gotcha below
+
+cd k8s-exercise/pulumi
+python3 -m venv venv && ./venv/bin/pip install -r requirements.txt
+export PULUMI_CONFIG_PASSPHRASE=""   # local backend still encrypts stack state
+pulumi stack init dev                # run this as its own command, after login has finished
+```
+
+> **Gotcha:** chaining `pulumi login --local` and `pulumi stack init` in the
+> same shell invocation can misfire — the CLI's first-run prompt can fall
+> through into the interactive `pulumi new` template wizard instead and
+> create a stray nested project. Run `pulumi login --local` by itself,
+> confirm with `pulumi whoami` / `cat ~/.pulumi/credentials.json` (expect
+> `"current": "file://~"`), then run `pulumi stack init dev` separately.
+> Verify with `pulumi stack ls` and `ls ~/.pulumi/stacks/graph-api/`.
+
+### Day-to-day
+
+```bash
+cd k8s-exercise/pulumi
+export PATH="$HOME/.pulumi/bin:$PATH"; export PULUMI_CONFIG_PASSPHRASE=""
+pulumi preview   # dry run against whatever cluster your kubeconfig points at
+pulumi up        # apply changes
+pulumi destroy   # tear everything down (hands the names back to plain kubectl)
+```
+
+`pulumi preview`/`up` talk to whatever cluster your current kubeconfig
+context points at (`kubectl config current-context`) — same as `kubectl`,
+no separate cluster config needed for this exercise's minikube setup.
+
+### Resuming after forgetting all of this
+
+1. `minikube status` — start it (`minikube start --driver=docker`) if it's
+   not running; a fresh minikube means the image needs reloading too
+   (`minikube image load tg-core-graph-api:local`, after rebuilding it if
+   needed — see the Docker/Compose steps above).
+2. `pulumi stack ls` (from `k8s-exercise/pulumi`, with `PATH`/
+   `PULUMI_CONFIG_PASSPHRASE` set as above) — confirms the `dev` stack and
+   whether Pulumi thinks it owns 0 or several resources.
+3. `kubectl get deployments,svc,configmaps,pods` — ground truth of what's
+   actually running, independent of what Pulumi's state file believes.
+4. To browse from outside the container: keep a
+   `kubectl port-forward svc/graph-api 8000:8000 --address 0.0.0.0` running,
+   then open the **Ports** panel in VS Code (it auto-forwards a listening
+   port) and use the forwarded `localhost:8000` (or the codespace's `https://
+   ...-8000...` URL) in your laptop's browser — try
+   `/entities/alice`, `/bfs?seed=alice`.
+
 ## So what are these YAML files all about?
 
 ### configmap.yaml
